@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Painel da Urna</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:14px;font-family:-apple-system,Arial,sans-serif;background:#16181c;color:#eee;font-size:16px}
+h2{font-size:18px;margin:22px 0 8px}
+section{background:#22252b;border-radius:12px;padding:12px;margin-bottom:12px}
+input,select,button{font-size:16px;padding:11px;border-radius:8px;border:1px solid #444;background:#2d3139;color:#fff;width:100%;margin:4px 0}
+button{background:#3a6ff0;border:0;font-weight:600}button.g{background:#2f9e55}button.r{background:#c0392b}button.s{background:#444}
+.row{display:flex;gap:8px}.row>*{flex:1}
+label{font-size:13px;color:#aaa}
+.cand{border-left:6px solid;padding-left:10px;margin-bottom:10px}
+#st{font-weight:700}#feed div{display:flex;gap:6px;align-items:center;margin:4px 0}#feed span{flex:2}#feed button{flex:1;margin:0;padding:8px}
+a{color:#7fb0ff}
+</style></head><body>
+<h1 style="font-size:22px;margin:0 0 6px">Painel da Urna</h1>
+<a href="/game.html" target="_blank">Abrir a urna (tela da live)</a>
+
+<h2>Senha do painel</h2>
+<section><input id="key" type="password" placeholder="Senha (ADMIN_KEY)"><button class="s" onclick="saveKey()">Entrar</button></section>
+
+<h2>Conexão com a live</h2>
+<section>
+ <input id="user" placeholder="@seu_usuario no TikTok" autocapitalize="none">
+ <div class="row"><button class="g" onclick="connectTT()">Conectar</button><button class="s" onclick="api('/api/disconnect')">Desconectar</button></div>
+ <div>Status: <span id="st">desconectado</span></div>
+</section>
+
+<h2>Votos</h2>
+<section>
+ <div class="row"><button id="t0" onclick="test(0)">+1 </button><button id="t1" onclick="test(1)">+1 </button></div>
+ <button class="r" onclick="if(confirm('Zerar votos?'))api('/api/reset')">Zerar votos</button>
+</section>
+
+<h2>Presentes recebidos agora</h2>
+<section><div id="feed"><small>Mande um presente na live: o nome aparece aqui para você ligar a um candidato.</small></div></section>
+
+<h2>Configuração</h2>
+<section>
+ <label>Título</label><input id="title">
+ <label>Votos por presente</label><input id="vpg" type="number" min="1">
+ <div id="cands"></div>
+ <label>Presentes (nome exato do TikTok)</label><div id="gifts"></div>
+ <button class="s" onclick="addGift()">+ Adicionar presente</button>
+ <button class="g" onclick="saveCfg()">Salvar configuração</button>
+</section>
+<script>
+const $=id=>document.getElementById(id);
+let cfg=null,seen={};
+$('key').value=localStorage.k||'';
+const H=()=>({'Content-Type':'application/json','x-admin-key':localStorage.k||''});
+async function api(u,b){const r=await fetch(u,{method:'POST',headers:H(),body:JSON.stringify(b||{})});const j=await r.json().catch(()=>({}));if(!r.ok)alert(j.error||'Erro');return j}
+function saveKey(){localStorage.k=$('key').value;load()}
+async function load(){const r=await fetch('/api/config',{headers:H()});if(!r.ok){alert('Senha incorreta');return}cfg=await r.json();$('user').value=cfg.tiktokUsername||'';draw()}
+function draw(){
+ $('title').value=cfg.title;$('vpg').value=cfg.votesPerGift;
+ $('t0').textContent='+1 '+cfg.candidates[0].number;$('t1').textContent='+1 '+cfg.candidates[1].number;
+ $('cands').innerHTML=cfg.candidates.map((c,i)=>`<div class="cand" style="border-color:${c.color}"><div class="row"><div><label>Número</label><input data-c="${i}.number" value="${c.number}"></div><div><label>Cor</label><input data-c="${i}.color" value="${c.color}"></div></div><label>Nome</label><input data-c="${i}.name" value="${c.name}"><label>Partido</label><input data-c="${i}.party" value="${c.party}"><label>Foto (endereço da imagem)</label><input data-c="${i}.image" value="${c.image}"></div>`).join('');
+ $('gifts').innerHTML=cfg.gifts.map((g,i)=>`<div class="cand" style="border-color:#555"><input data-g="${i}.name" placeholder="Nome no TikTok" value="${g.name}"><input data-g="${i}.label" placeholder="Nome na tela" value="${g.label}"><select data-g="${i}.candidate"><option value="0" ${g.candidate==0?'selected':''}>${cfg.candidates[0].number} ${cfg.candidates[0].name}</option><option value="1" ${g.candidate==1?'selected':''}>${cfg.candidates[1].number} ${cfg.candidates[1].name}</option></select><button class="r" onclick="delGift(${i})">Remover</button></div>`).join('');
+}
+function collect(){
+ cfg.title=$('title').value;cfg.votesPerGift=Number($('vpg').value)||1;
+ document.querySelectorAll('[data-c]').forEach(e=>{const[i,k]=e.dataset.c.split('.');cfg.candidates[i][k]=e.value});
+ document.querySelectorAll('[data-g]').forEach(e=>{const[i,k]=e.dataset.g.split('.');cfg.gifts[i][k]=k=='candidate'?Number(e.value):e.value});
+}
+function addGift(){collect();cfg.gifts.push({name:'',label:'',candidate:0,image:'/rose.png',css:''});draw()}
+function delGift(i){collect();cfg.gifts.splice(i,1);draw()}
+async function saveCfg(){collect();const j=await api('/api/config',cfg);if(j.ok){alert('Salvo!');draw()}}
+async function connectTT(){$('st').textContent='conectando...';const j=await api('/api/connect',{username:$('user').value});if(!j.ok)$('st').textContent='desconectado'}
+const test=c=>api('/api/vote',{candidate:c});
+function assign(name,c){collect();if(!cfg.gifts.find(g=>g.name.toLowerCase()==name.toLowerCase()))cfg.gifts.push({name,label:name,candidate:c,image:'/rose.png',css:''});draw();saveCfg()}
+function feed(){$('feed').innerHTML=Object.keys(seen).map(n=>`<div><span>${n}</span><button onclick="assign('${n.replace(/'/g,"\\'")}',0)">→ ${cfg?cfg.candidates[0].number:''}</button><button onclick="assign('${n.replace(/'/g,"\\'")}',1)">→ ${cfg?cfg.candidates[1].number:''}</button></div>`).join('')}
+function ws(){const w=new WebSocket((location.protocol=='https:'?'wss://':'ws://')+location.host);
+ w.onmessage=m=>{const d=JSON.parse(m.data);
+  if(d.type=='STATE'||d.type=='STATUS')$('st').textContent=d.status=='connected'?'conectado ✔':'desconectado';
+  if(d.type=='GIFT_SEEN'){seen[d.name]=1;feed()}};
+ w.onclose=()=>setTimeout(ws,2000)}
+ws();load();
+</script></body></html>

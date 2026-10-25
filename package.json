@@ -1,0 +1,11 @@
+{
+  "name": "urna-tiktok",
+  "version": "1.0.0",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^5.2.1",
+    "tiktok-live-connector": "^2.1.1-beta1",
+    "ws": "^8.21.0"
+  }
+}
