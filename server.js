@@ -85,22 +85,36 @@ function deep(o, names, depth = 0, seen = new Set()) {
 const norm = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 const ALIAS = { 'rosa': 'rose', 'rosa branca': 'white rose' };
 
+const seenMsgs = new Set();
 function onGift(data) {
   try {
     try { console.log('Presente bruto:', JSON.stringify(data, (k, v) => typeof v === 'bigint' ? v.toString() : v).slice(0, 1500)); } catch (e) {}
+    // ignora o mesmo evento se o TikTok mandar repetido
+    const mid = deep(data, ['msgId', 'msg_id']);
+    if (mid !== undefined) {
+      const m = String(mid);
+      if (seenMsgs.has(m)) { console.log('Presente repetido ignorado'); return; }
+      seenMsgs.add(m);
+      if (seenMsgs.size > 500) seenMsgs.delete(seenMsgs.values().next().value);
+    }
     const user = deep(data.user || data.sender || data, ['uniqueId', 'unique_id', 'nickname', 'nickName']) || 'alguem';
     const giftName = deep(data, ['giftName', 'gift_name', 'name']) || '';
     const giftId = deep(data, ['giftId', 'gift_id', 'id']) || giftName;
     const giftType = Number(deep(data, ['giftType', 'gift_type']));
     const repeatEnd = deep(data, ['repeatEnd', 'repeat_end']);
+    const group = deep(data, ['groupId', 'group_id']) || '';
     const repeatCount = Number(deep(data, ['repeatCount', 'repeat_count', 'comboCount'])) || 1;
-    const key = user + ':' + giftId;
-    let n = 1;
-    if (giftType === 1) {
-      n = repeatCount - (streaks[key] || 0);
-      if (repeatEnd) delete streaks[key]; else streaks[key] = repeatCount;
+    const key = user + ':' + giftId + ':' + group;
+    let n;
+    if (!Number.isNaN(giftType) && giftType !== 1) {
+      n = repeatCount; // presente que não acumula em sequência
     } else {
-      n = repeatCount;
+      // sequência: conta só o que ainda não foi contado (1 rosa = 1 ponto)
+      const now = Date.now();
+      const st = streaks[key];
+      const prev = st && now - st.t < 15000 ? st.n : 0;
+      n = repeatCount - prev;
+      if (repeatEnd) delete streaks[key]; else streaks[key] = { n: repeatCount, t: now };
     }
     console.log('Presente:', giftName || ('ID ' + giftId), 'de', user, 'x', n);
     if (n <= 0) return;
