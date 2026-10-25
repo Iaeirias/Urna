@@ -64,53 +64,84 @@ app.post('/api/reset', admin, (req, res) => {
   res.json({ ok: true });
 });
 
+let wantUser = '';
+let retryTimer = null;
+
+function onGift(data) {
+  try {
+    const user = data.uniqueId || (data.user && data.user.uniqueId) || 'alguem';
+    const gd = data.giftDetails || {};
+    const giftName = data.giftName || gd.giftName || '';
+    const giftId = data.giftId || gd.id || giftName;
+    const giftType = data.giftType !== undefined ? data.giftType : gd.giftType;
+    const key = user + ':' + giftId;
+    let n = 1;
+    if (giftType === 1) {
+      const total = Number(data.repeatCount) || 1;
+      n = total - (streaks[key] || 0);
+      if (data.repeatEnd) delete streaks[key]; else streaks[key] = total;
+    } else {
+      n = Number(data.repeatCount) || 1;
+    }
+    console.log('Presente:', giftName, 'de', user, 'x', n);
+    if (n <= 0) return;
+    broadcast({ type: 'GIFT_SEEN', name: giftName, user });
+    const g = (config.gifts || []).find(x => x.name.toLowerCase() === String(giftName).toLowerCase());
+    if (!g) return;
+    addVote(g.candidate, user, g.label || g.name, n * (Number(config.votesPerGift) || 1));
+  } catch (e) { console.error('Erro no presente:', e); }
+}
+
+function scheduleRetry() {
+  if (!wantUser) return;
+  clearTimeout(retryTimer);
+  retryTimer = setTimeout(() => {
+    if (!wantUser || status === 'connected') return;
+    console.log('Tentando reconectar em @' + wantUser);
+    startConnection(wantUser).catch(e => console.log('Reconexão falhou:', e && e.message ? e.message : e));
+  }, 20000);
+}
+
+async function startConnection(username) {
+  wantUser = username;
+  clearTimeout(retryTimer);
+  if (conn) { const old = conn; conn = null; try { old.disconnect(); } catch (e) {} }
+  let c;
+  try {
+    c = new Connection(username, { processInitialData: false });
+    conn = c;
+    c.on('gift', onGift);
+    c.on('error', e => console.error('Erro do TikTok:', e && e.message ? e.message : e));
+    c.on('disconnected', () => {
+      if (conn !== c) return;
+      status = 'disconnected'; broadcast({ type: 'STATUS', status });
+      scheduleRetry();
+    });
+    const s = await c.connect();
+    if (conn === c) { status = 'connected'; broadcast({ type: 'STATUS', status }); }
+    return s;
+  } catch (err) {
+    console.error('Erro ao conectar:', err);
+    if (!c || conn === c) { status = 'disconnected'; broadcast({ type: 'STATUS', status }); scheduleRetry(); }
+    throw err;
+  }
+}
+
 app.post('/api/connect', admin, async (req, res) => {
-  const username = String(req.body.username || '').replace('@', '').trim();
+  const username = String(req.body.username || '').replace('@', '').trim().toLowerCase();
   if (!username) return res.status(400).json({ error: 'Informe o @usuário' });
   config.tiktokUsername = username; save();
-  if (conn) { try { conn.disconnect(); } catch (e) {} }
-  conn = new Connection(username, { processInitialData: false });
-
-  conn.on('gift', data => {
-    try {
-      const user = data.uniqueId || (data.user && data.user.uniqueId) || 'alguem';
-      const gd = data.giftDetails || {};
-      const giftName = data.giftName || gd.giftName || '';
-      const giftId = data.giftId || gd.id || giftName;
-      const giftType = data.giftType !== undefined ? data.giftType : gd.giftType;
-      const key = user + ':' + giftId;
-      let n = 1;
-      if (giftType === 1) {
-        const total = Number(data.repeatCount) || 1;
-        n = total - (streaks[key] || 0);
-        if (data.repeatEnd) delete streaks[key]; else streaks[key] = total;
-      } else {
-        n = Number(data.repeatCount) || 1;
-      }
-      console.log('Presente:', giftName, 'de', user, 'x', n);
-      if (n <= 0) return;
-      broadcast({ type: 'GIFT_SEEN', name: giftName, user });
-      const g = (config.gifts || []).find(x => x.name.toLowerCase() === String(giftName).toLowerCase());
-      if (!g) return;
-      addVote(g.candidate, user, g.label || g.name, n * (Number(config.votesPerGift) || 1));
-    } catch (e) { console.error('Erro no presente:', e); }
-  });
-  conn.on('disconnected', () => { status = 'disconnected'; broadcast({ type: 'STATUS', status }); });
-
   try {
-    const s = await conn.connect();
-    status = 'connected';
-    broadcast({ type: 'STATUS', status });
+    const s = await startConnection(username);
     res.json({ ok: true, roomId: s.roomId });
   } catch (err) {
-    status = 'disconnected';
-    console.error('Erro ao conectar:', err);
-    res.status(500).json({ error: 'Não conectou. A live precisa estar aberta. ' + (err && err.message ? err.message : err) });
+    res.status(500).json({ error: 'Não conectou. A live precisa estar aberta. Vou tentar de novo sozinho. ' + (err && err.message ? err.message : err) });
   }
 });
 
 app.post('/api/disconnect', admin, (req, res) => {
-  if (conn) { try { conn.disconnect(); } catch (e) {} conn = null; }
+  wantUser = ''; clearTimeout(retryTimer);
+  if (conn) { const old = conn; conn = null; try { old.disconnect(); } catch (e) {} }
   status = 'disconnected';
   broadcast({ type: 'STATUS', status });
   res.json({ ok: true });
@@ -118,4 +149,13 @@ app.post('/api/disconnect', admin, (req, res) => {
 
 wss.on('connection', ws => ws.send(JSON.stringify(snapshot())));
 
-server.listen(PORT, '0.0.0.0', () => console.log('Urna rodando na porta ' + PORT));
+process.on('uncaughtException', e => console.error('Erro inesperado:', e));
+process.on('unhandledRejection', e => console.error('Promessa rejeitada:', e));
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log('Urna rodando na porta ' + PORT);
+  const auto = String(process.env.TIKTOK_USERNAME || config.tiktokUsername || '').replace('@', '').trim().toLowerCase();
+  if (auto) startConnection(auto).catch(e => console.log('Primeira conexão falhou, vou tentar de novo:', e && e.message ? e.message : e));
+  const self = process.env.RENDER_EXTERNAL_URL;
+  if (self) setInterval(() => { fetch(self + '/api/state').catch(() => {}); }, 10 * 60 * 1000);
+});

@@ -1,13 +1,37 @@
 {
-  "tiktokUsername": "",
+  "tiktokUsername": "doramas.tvsilva",
   "title": "VOTE PELA ROSA",
   "votesPerGift": 1,
   "candidates": [
-    { "number": "13", "name": "LULA", "party": "PT", "color": "#d62828", "image": "/lula.webp" },
-    { "number": "22", "name": "BOLSONARO", "party": "PL", "color": "#1b8a3a", "image": "/bolsonaro.webp" }
+    {
+      "number": "13",
+      "name": "LULA",
+      "party": "PT",
+      "color": "#d62828",
+      "image": "/lula.webp"
+    },
+    {
+      "number": "22",
+      "name": "BOLSONARO",
+      "party": "PL",
+      "color": "#1b8a3a",
+      "image": "/bolsonaro.webp"
+    }
   ],
   "gifts": [
-    { "name": "Rose", "label": "Rosa vermelha", "candidate": 0, "image": "/rose.png", "css": "" },
-    { "name": "White Rose", "label": "Rosa branca", "candidate": 1, "image": "/rose.png", "css": "grayscale(1) brightness(2.4)" }
+    {
+      "name": "Rose",
+      "label": "Rosa vermelha",
+      "candidate": 0,
+      "image": "/rose.png",
+      "css": ""
+    },
+    {
+      "name": "White Rose",
+      "label": "Rosa branca",
+      "candidate": 1,
+      "image": "/rose.png",
+      "css": "grayscale(1) brightness(2.4)"
+    }
   ]
 }
