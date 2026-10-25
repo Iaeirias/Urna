@@ -18,9 +18,9 @@ html,body{height:100%;background:#05070f;overflow:hidden;font-family:"Arial Blac
 #live{font:700 20px Arial,sans-serif;letter-spacing:3px;background:#d4122c;border-radius:20px;padding:4px 16px;display:flex;align-items:center;gap:8px}
 #live i{width:12px;height:12px;border-radius:50%;background:#fff;animation:blink 1.2s infinite}
 @keyframes blink{50%{opacity:.25}}
-#legend{display:flex;justify-content:center;gap:14px;height:50px}
-.lg{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);border-radius:12px;padding:4px 14px;font:700 22px Arial,sans-serif}
-.lg img{width:34px;height:34px;object-fit:contain}.lg b{padding:2px 10px;border-radius:6px;font-size:22px}
+#legend{display:flex;justify-content:center;gap:16px;height:66px}
+.lg{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);border-radius:14px;padding:4px 18px;font:900 32px Arial,sans-serif;letter-spacing:1px}
+.lg img{width:52px;height:52px;object-fit:contain}.lg b{padding:0 12px;border-radius:8px;font-size:32px;line-height:44px}
 #info{display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:12px;height:84px}
 .ib{background:rgba(0,0,0,.45);border:2px solid rgba(255,255,255,.2);border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .ib small{font:700 17px Arial,sans-serif;letter-spacing:2px;color:#9fb0d8}.ib span{font-size:38px;line-height:1.1}
@@ -139,7 +139,7 @@ function render(){
    <div class="pbar"><i style="width:${pctN(i)}%"></i></div><div class="pct">${pctT(i)}</div>
    <div class="last">${lastV?'@'+lastV.user+' • '+lastV.gift+' • +'+lastV.count+(lastV.count>1?' pontos':' ponto'):'aguardando votos'}</div>`;
  });
- $('legend').innerHTML=cfg.gifts.map(g=>{const c=cfg.candidates[g.candidate];return `<div class="lg"><img src="${g.image}" style="filter:${g.css||'none'}" alt=""> ${g.label} <b style="background:${c.color}">${c.number}</b></div>`}).join('');
+ $('legend').innerHTML=cfg.gifts.map(g=>{const c=cfg.candidates[g.candidate];return `<div class="lg"><img src="${g.image}" style="filter:${g.css||'none'}" alt=""> <span>VOTE</span> <b style="background:${c.color}">${c.number}</b></div>`}).join('');
  $('tick').innerHTML=shownRecent.slice(0,5).map(r=>`<div style="--k:${cfg.candidates[r.candidate].color}">@${r.user} votou ${cfg.candidates[r.candidate].number} (${r.count}x ${r.gift})</div>`).join('');
 }
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
