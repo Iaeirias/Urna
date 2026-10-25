@@ -67,27 +67,50 @@ app.post('/api/reset', admin, (req, res) => {
 let wantUser = '';
 let retryTimer = null;
 
+const SKIP = /^(toUser|to_user|anchor|host|receiver)$/i;
+function deep(o, names, depth = 0, seen = new Set()) {
+  if (!o || typeof o !== 'object' || depth > 6 || seen.has(o)) return undefined;
+  seen.add(o);
+  for (const n of names) {
+    const v = o[n];
+    if (v !== undefined && v !== null && v !== '' && typeof v !== 'object') return v;
+  }
+  for (const k of Object.keys(o)) {
+    if (SKIP.test(k)) continue;
+    const r = deep(o[k], names, depth + 1, seen);
+    if (r !== undefined) return r;
+  }
+  return undefined;
+}
+const norm = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const ALIAS = { 'rosa': 'rose', 'rosa branca': 'white rose' };
+
 function onGift(data) {
   try {
-    const user = data.uniqueId || (data.user && data.user.uniqueId) || 'alguem';
-    const gd = data.giftDetails || {};
-    const giftName = data.giftName || gd.giftName || '';
-    const giftId = data.giftId || gd.id || giftName;
-    const giftType = data.giftType !== undefined ? data.giftType : gd.giftType;
+    try { console.log('Presente bruto:', JSON.stringify(data, (k, v) => typeof v === 'bigint' ? v.toString() : v).slice(0, 1500)); } catch (e) {}
+    const user = deep(data.user || data.sender || data, ['uniqueId', 'unique_id', 'nickname', 'nickName']) || 'alguem';
+    const giftName = deep(data, ['giftName', 'gift_name', 'name']) || '';
+    const giftId = deep(data, ['giftId', 'gift_id', 'id']) || giftName;
+    const giftType = Number(deep(data, ['giftType', 'gift_type']));
+    const repeatEnd = deep(data, ['repeatEnd', 'repeat_end']);
+    const repeatCount = Number(deep(data, ['repeatCount', 'repeat_count', 'comboCount'])) || 1;
     const key = user + ':' + giftId;
     let n = 1;
     if (giftType === 1) {
-      const total = Number(data.repeatCount) || 1;
-      n = total - (streaks[key] || 0);
-      if (data.repeatEnd) delete streaks[key]; else streaks[key] = total;
+      n = repeatCount - (streaks[key] || 0);
+      if (repeatEnd) delete streaks[key]; else streaks[key] = repeatCount;
     } else {
-      n = Number(data.repeatCount) || 1;
+      n = repeatCount;
     }
-    console.log('Presente:', giftName, 'de', user, 'x', n);
+    console.log('Presente:', giftName || ('ID ' + giftId), 'de', user, 'x', n);
     if (n <= 0) return;
-    broadcast({ type: 'GIFT_SEEN', name: giftName, user });
-    const g = (config.gifts || []).find(x => x.name.toLowerCase() === String(giftName).toLowerCase());
-    if (!g) return;
+    broadcast({ type: 'GIFT_SEEN', name: giftName || ('ID ' + giftId), user });
+    const wanted = norm(giftName);
+    const g = (config.gifts || []).find(x => {
+      const nm = norm(x.name);
+      return nm === wanted || nm === (ALIAS[wanted] || wanted);
+    });
+    if (!g) { console.log('Presente sem ligação na configuração:', giftName); return; }
     addVote(g.candidate, user, g.label || g.name, n * (Number(config.votesPerGift) || 1));
   } catch (e) { console.error('Erro no presente:', e); }
 }
