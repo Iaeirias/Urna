@@ -88,7 +88,20 @@ function fit(){const s=Math.min(innerWidth/720,innerHeight/1280);$('stage').styl
 addEventListener('resize',fit);fit();
 $('snd').onclick=()=>{ac=ac||new (window.AudioContext||window.webkitAudioContext)();ac.resume();$('snd').remove()};
 const KEYS=['1','2','3','4','5','6','7','8','9','BRANCO','0','CORRIGE'];
-function beep(f,d,t=0){if(!ac)return;const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.type='square';g.gain.value=.08;o.connect(g);g.connect(ac.destination);o.start(ac.currentTime+t);o.stop(ac.currentTime+t+d)}
+let bus=null;
+function getBus(){if(!ac)return null;if(!bus){bus=ac.createDynamicsCompressor();const g=ac.createGain();g.gain.value=.9;bus.connect(g);g.connect(ac.destination)}return bus}
+function tone(f,d,o={}){const b=getBus();if(!b)return;const type=o.type||'sine',vol=o.vol||.1,t=o.t||0,osc=ac.createOscillator(),g=ac.createGain(),s=ac.currentTime+t;osc.type=type;osc.frequency.setValueAtTime(f,s);if(o.to)osc.frequency.exponentialRampToValueAtTime(o.to,s+d);g.gain.setValueAtTime(.0001,s);g.gain.exponentialRampToValueAtTime(vol,s+.006);g.gain.exponentialRampToValueAtTime(.0001,s+d);osc.connect(g);g.connect(b);osc.start(s);osc.stop(s+d+.03)}
+function click(){const b=getBus();if(!b)return;const n=Math.floor(ac.sampleRate*.03),buf=ac.createBuffer(1,n,ac.sampleRate),d=buf.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,3);const src=ac.createBufferSource(),f=ac.createBiquadFilter(),g=ac.createGain();f.type='highpass';f.frequency.value=1800;g.gain.value=.5;src.buffer=buf;src.connect(f);f.connect(g);g.connect(b);src.start()}
+function keySound(){click();tone(1500,.05,{type:'square',vol:.04,to:1100})}
+const CHORDS=[[523.25,659.25,783.99,1046.5],[587.33,739.99,880,1174.66]];
+function confirmSound(i,count){
+ tone(1000,.9,{type:'square',vol:.07});
+ const ch=CHORDS[i%2];ch.forEach((f,n)=>tone(f,.45,{type:'triangle',vol:.1,t:.12+n*.09}));
+ if(count>=3)[1,1.25,1.5,2].forEach((m,n)=>tone(ch[3]*m,.3,{type:'sine',vol:.06,t:.55+n*.07}));
+ if(count>=10)tone(ch[0]/2,1.1,{type:'sawtooth',vol:.05,t:.1,to:ch[0]});
+}
+function fanfare(){[392,523.25,659.25,783.99,1046.5].forEach((f,n)=>{tone(f,.28,{type:'square',vol:.06,t:n*.1});tone(f*2,.28,{type:'triangle',vol:.05,t:n*.1})});tone(1046.5,.7,{type:'triangle',vol:.1,t:.55})}
+const leadOf=a=>a[0]>a[1]?0:a[1]>a[0]?1:-1;
 const sum=()=>shown[0]+shown[1];
 const pctN=i=>{const s=sum();return s?shown[i]*100/s:50};
 const pctT=i=>pctN(i).toFixed(1).replace('.',',')+'%';
@@ -140,7 +153,7 @@ function moveHand(i,k){
 async function press(i,k){
  const u=$('u'+i),e=u.querySelector(`[data-k="${k}"]`),h=$('hand'+i);
  moveHand(i,k);await wait(130);
- if(e)e.classList.add('on');h.classList.add('tap');beep(900,.08);
+ if(e)e.classList.add('on');h.classList.add('tap');keySound();
  await wait(150);
  if(e)e.classList.remove('on');h.classList.remove('tap');
 }
@@ -150,8 +163,9 @@ async function play(v){
  for(let n=0;n<digits.length;n++){await press(i,digits[n]);setBoxes(i,n+1)}
  await press(i,'CONFIRMA');
  $('fimt'+i).textContent='+'+v.count+(v.count>1?' PONTOS':' PONTO');
- $('fim'+i).classList.add('show');$('led'+i).classList.add('on');beep(700,.9);
- shown=v.votes.slice();shownRecent=v.recent;render();
+ $('fim'+i).classList.add('show');$('led'+i).classList.add('on');confirmSound(i,v.count);
+ const before=leadOf(shown);shown=v.votes.slice();shownRecent=v.recent;render();
+ const after=leadOf(shown);if(before>=0&&after>=0&&before!==after)setTimeout(fanfare,750);
  const d=$('dl'+i);if(d){d.textContent='+'+v.count;d.classList.remove('go');void d.offsetWidth;d.classList.add('go')}
  $('c'+i).classList.add('pop');
  await wait(1000);
@@ -163,7 +177,7 @@ function connect(){
  const ws=new WebSocket((location.protocol=='https:'?'wss://':'ws://')+location.host);
  ws.onmessage=m=>{const d=JSON.parse(m.data);
   if(d.type=='STATE'){cfg=d.config;votes=d.votes;recent=d.recent;if(!busy){shown=votes.slice();shownRecent=recent}render()}
-  if(d.type=='VOTE'){votes=d.votes;recent=d.recent;if(queue.length<4){queue.push(d);run()}else{beep(700,.2);if(!busy){shown=votes.slice();shownRecent=recent;render()}}}};
+  if(d.type=='VOTE'){votes=d.votes;recent=d.recent;if(queue.length<4){queue.push(d);run()}else{tone(600,.15,{type:'square',vol:.05});if(!busy){shown=votes.slice();shownRecent=recent;render()}}}};
  ws.onclose=()=>setTimeout(connect,2000);
 }
 connect();
